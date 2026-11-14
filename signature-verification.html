@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="HMAC-SHA256 raw-body verification, timestamp freshness, key rotation and durable idempotency for fictional webhooks."><title>Signature verification | PulseFlow Webhooks</title><link rel="stylesheet" href="assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header><div class="brand">◈ PulseFlow Cloud / Webhook Lab</div><div class="badge">Fictional events · local simulation only</div><nav aria-label="Primary"><a href="signature-verification.html">Verify</a><a href="index.html">Home</a><a href="payload-examples.html">Payloads</a><a href="faq.html">FAQ</a></nav></header><main id="main"><p class="eyebrow">Receiver security / HMAC-SHA256</p><h1>Verify the bytes you actually received.</h1><p class="lead">A receiver should authenticate the raw body before trusting fields, check the delivery timestamp and apply durable deduplication before performing side effects.</p><h2>Header and signing input</h2><pre><code>PulseFlow-Signature: t=1794643200,v1=&lt;64 hexadecimal characters&gt;
+
+signed_bytes = UTF8(timestamp + '.') || raw_request_body
+signature = HMAC_SHA256(destination_secret, signed_bytes)</code></pre><p>The timestamp is Unix seconds in the signature header, not the event's <code>occurred_at</code> value. A replay can legitimately deliver an older event with a new signing timestamp. Reject timestamps more than 300 seconds in either direction from the receiver's synchronized clock.</p><h2>Node.js reference function</h2><pre><code>import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verify(rawBody, header, secret, nowSeconds = Math.floor(Date.now() / 1000)) {
+  if (!Buffer.isBuffer(rawBody) || typeof header !== 'string' ||
+      typeof secret !== 'string' || secret.length === 0) return false;
+  const parts = header.split(',').map(part =&gt; part.trim());
+  const timestamps = parts.filter(part =&gt; part.startsWith('t='));
+  if (timestamps.length !== 1) return false;
+  const rawTimestamp = timestamps[0].slice(2);
+  if (!/^\d{10}$/.test(rawTimestamp)) return false;
+  const timestamp = Number(rawTimestamp);
+  if (Math.abs(nowSeconds - timestamp) &gt; 300) return false;
+
+  const expected = createHmac('sha256', secret)
+    .update(rawTimestamp + '.')
+    .update(rawBody)
+    .digest();
+  return parts.filter(part =&gt; part.startsWith('v1=')).some(part =&gt; {
+    const candidate = part.slice(3);
+    if (!/^[a-f0-9]{64}$/i.test(candidate)) return false;
+    return timingSafeEqual(Buffer.from(candidate, 'hex'), expected);
+  });
+}</code></pre><p>Capture a bounded raw Buffer before JSON middleware transforms the body. Enforce a request-size limit before buffering and reject malformed headers rather than throwing an uncaught exception. The reference function assumes a finite, trusted server clock; callers must not obtain <code>nowSeconds</code> from user input.</p><h2>Correct receiver order</h2><ol><li>Apply method, content-type and body-size limits.</li><li>Read the exact bytes and validate signature-header structure.</li><li>Verify freshness and HMAC against an authorized destination secret.</li><li>Parse JSON and validate the envelope and event-specific fields.</li><li>Atomically record the inbox key with the side effect or durable work item.</li><li>Acknowledge duplicates without reapplying the effect.</li></ol><h2>Rotation and replay defense</h2><p>During a bounded rotation overlap, verify against the active and immediately previous secret. Remove the old secret after all valid in-flight deliveries can complete. Log only secret version identifiers, never key values. Timestamp checks limit capture-and-replay windows but do not replace deduplication; an attacker or network can resend a fresh valid delivery.</p><h2>Common verification failures</h2><div class="table-wrap"><table><thead><tr><th>Symptom</th><th>Likely cause</th></tr></thead><tbody><tr><td>JSON is equal but HMAC differs</td><td>Whitespace, encoding or key order changed after signing</td></tr><tr><td>Only one environment fails</td><td>Wrong destination secret or clock skew</td></tr><tr><td>Old events always rejected</td><td>Confusing occurrence time with signing time</td></tr><tr><td>Valid duplicate repeats a side effect</td><td>No durable, transactional inbox</td></tr></tbody></table></div><p>Use the <a href="live-sandbox.html">local inspector</a> to alter the body or timestamp deliberately. The extended integration notes are available under the <a href="./docs/signature-verification.html">receiver authentication handbook</a>.</p><aside class="notice warning">The browser secret is a demonstration value only. A production signing secret belongs on a server, never in a public page. This code illustrates one contract and is not a substitute for a complete security review.</aside></main><footer><p>Fictional webhook contract · Verify before parse, deduplicate before side effects.</p><p><a href="https://harishs2k26-art.github.io/pulseflow-docs-portal/">Central documentation hub</a> · <a href="https://github.com/harishs2k26-art/pulseflow-webhook-demo">Repository source</a></p></footer></body></html>

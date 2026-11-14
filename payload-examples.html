@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Synthetic workflow and API alert webhook payloads, envelope definitions, evolution rules and duplicate handling."><title>Payload examples | PulseFlow Webhooks</title><link rel="stylesheet" href="assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a><header><div class="brand">◈ PulseFlow Cloud / Webhook Lab</div><div class="badge">Fictional events · local simulation only</div><nav aria-label="Primary"><a href="index.html">Home</a><a href="live-sandbox.html">Sandbox</a><a href="payload-examples.html">Examples</a></nav></header><main id="main"><p class="eyebrow">Event library / schema 2026-10-01</p><h1>Small envelopes. Clear operational meaning.</h1><p class="lead">These synthetic examples contain no customer data and can be pasted into the local inspector. Field names are part of the protocol and remain stable across localized interfaces.</p><h2>Workflow succeeded</h2><pre><code>{
+  "id": "evt_demo_1001",
+  "type": "workflow.succeeded",
+  "schema_version": "2026-10-01",
+  "occurred_at": "2026-11-14T07:00:00Z",
+  "workspace_id": "ws_demo",
+  "data": {
+    "run_id": "run_checkout_42",
+    "workflow": "checkout.fulfillment",
+    "duration_ms": 184,
+    "step_count": 4
+  }
+}</code></pre><p>A success event means the logical workflow reached its terminal successful state. It does not mean every notification has already been delivered. Use the run ID to correlate with traces and the event ID to deduplicate downstream processing.</p><h2>Workflow failed</h2><pre><code>{
+  "id": "evt_demo_1002",
+  "type": "workflow.failed",
+  "schema_version": "2026-10-01",
+  "occurred_at": "2026-11-14T07:01:00Z",
+  "workspace_id": "ws_demo",
+  "data": {
+    "run_id": "run_checkout_43",
+    "workflow": "checkout.fulfillment",
+    "duration_ms": 5000,
+    "error": {"code": "UPSTREAM_TIMEOUT", "retryable": true},
+    "failed_step": "inventory.reserve"
+  }
+}</code></pre><p>The retryable hint describes the upstream failure, not permission to execute a business action twice. The workflow owner decides whether a new run is safe. Never include a raw exception containing credentials or personal details in the event.</p><h2>API threshold breached</h2><pre><code>{
+  "id": "evt_demo_1003",
+  "type": "api.threshold_breached",
+  "schema_version": "2026-10-01",
+  "occurred_at": "2026-11-14T07:02:00Z",
+  "workspace_id": "ws_demo",
+  "data": {
+    "route": "POST /v1/orders",
+    "metric": "p95_latency_ms",
+    "observed": 820,
+    "threshold": 500,
+    "window_seconds": 300,
+    "sample_count": 1200
+  }
+}</code></pre><p>Use route templates, not raw URLs containing user identifiers or query-string secrets. Interpret a threshold in the context of the observation window and sample size; a single slow request is not equivalent to a sustained percentile regression.</p><h2>Envelope field reference</h2><div class="table-wrap"><table><thead><tr><th>Field</th><th>Rule</th><th>Consumer behavior</th></tr></thead><tbody><tr><td>id</td><td>Stable logical event identifier</td><td>Keep unchanged on replay</td></tr><tr><td>type</td><td>Documented dotted event name</td><td>Route known types; safely handle unknown ones</td></tr><tr><td>schema_version</td><td>Date-based envelope contract</td><td>Reject unsupported breaking versions</td></tr><tr><td>occurred_at</td><td>UTC event time ending in Z</td><td>Do not confuse with delivery signing time</td></tr><tr><td>workspace_id</td><td>Tenant context, independently authorized</td><td>Include in deduplication keys</td></tr><tr><td>data</td><td>Event-specific JSON object</td><td>Validate fields before side effects</td></tr></tbody></table></div><h2>Evolution and replay</h2><p>Consumers should tolerate additive fields while validating the fields they use. A signature proves possession of a shared secret, not semantic validity. Deduplicate transactionally, retain inbox IDs at least 72 hours for the reference delivery window and treat replay as another attempt of the same event.</p><p>Open the <a href="live-sandbox.html">local simulator</a> to exercise these payloads. Teams comparing older bookmarks can consult the <a href="./Payload-Examples.html">print-friendly payload catalog</a>. Read <a href="signature-verification.html">signature verification</a> before accepting any real delivery.</p></main><footer><p>Synthetic payload library · No personal or production data.</p><p><a href="https://harishs2k26-art.github.io/pulseflow-docs-portal/">Central documentation hub</a> · <a href="https://github.com/harishs2k26-art/pulseflow-webhook-demo">Repository source</a></p></footer></body></html>
